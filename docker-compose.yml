@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  server:
+    build: ./server
+    container_name: synthx_server
+    env_file: .env
+    volumes:
+      - ./server/generated:/app/generated
+      - ./server/logs:/app/logs
+    ports:
+      - "8080:8080"
+    depends_on:
+      chromadb:
+        condition: service_healthy
+
+  client:
+    build: ./client
+    container_name: synthx_client
+    env_file: .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: synthx_chromadb
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    environment:
+      ALLOW_RESET: "true"
+    volumes:
+      - chromadb_data:/chroma
+
+volumes:
+  chromadb_data:
