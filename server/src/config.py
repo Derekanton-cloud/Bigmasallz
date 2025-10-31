@@ -18,6 +18,18 @@ class GeminiConfig(BaseModel):
     top_k: int = 40
 
 
+class CopilotConfig(BaseModel):
+    """GitHub Copilot (Claude) API configuration."""
+
+    api_key: str
+    model: str = "claude-3.5-sonnet"
+    base_url: str | None = None
+    max_retries: int = 3
+    timeout: int = 120
+    temperature: float = 0.6
+    max_rows_per_call: int = 200
+
+
 class MCPServerConfig(BaseModel):
     """MCP Server configuration."""
     host: str = "localhost"
@@ -47,6 +59,7 @@ class GenerationConfig(BaseModel):
     max_chunk_size: int = 5000
     min_chunk_size: int = 100
     default_output_format: Literal["csv", "json", "parquet"] = "csv"
+    provider: Literal["gemini", "copilot"] = "gemini"
 
 
 class JobConfig(BaseModel):
@@ -91,10 +104,19 @@ class Settings(BaseSettings):
     )
 
     # Gemini API
-    gemini_api_key: str
+    gemini_api_key: str | None = None
     gemini_model: str = "gemini-1.5-pro"
     gemini_max_retries: int = 3
     gemini_timeout: int = 120
+
+    # Copilot API
+    copilot_api_key: str | None = None
+    copilot_model: str = "claude-3.5-sonnet"
+    copilot_base_url: str | None = None
+    copilot_max_retries: int = 3
+    copilot_timeout: int = 120
+    copilot_temperature: float = 0.6
+    copilot_max_rows_per_call: int = 200
 
     # MCP Server
     mcp_server_host: str = "localhost"
@@ -120,6 +142,7 @@ class Settings(BaseSettings):
     max_chunk_size: int = 5000
     min_chunk_size: int = 100
     default_output_format: Literal["csv", "json", "parquet"] = "csv"
+    generation_provider: Literal["gemini", "copilot"] = "gemini"
 
     # Job Management
     job_persistence_path: str = "./temp/jobs"
@@ -152,10 +175,25 @@ class Settings(BaseSettings):
     def gemini(self) -> GeminiConfig:
         """Get Gemini configuration."""
         return GeminiConfig(
-            api_key=self.gemini_api_key,
+            api_key=self.gemini_api_key or "",
             model=self.gemini_model,
             max_retries=self.gemini_max_retries,
             timeout=self.gemini_timeout
+        )
+
+    @property
+    def copilot(self) -> CopilotConfig | None:
+        """Get Copilot configuration if credentials supplied."""
+        if not self.copilot_api_key:
+            return None
+        return CopilotConfig(
+            api_key=self.copilot_api_key,
+            model=self.copilot_model,
+            base_url=self.copilot_base_url,
+            max_retries=self.copilot_max_retries,
+            timeout=self.copilot_timeout,
+            temperature=self.copilot_temperature,
+            max_rows_per_call=self.copilot_max_rows_per_call,
         )
 
     @property
@@ -190,7 +228,8 @@ class Settings(BaseSettings):
             default_chunk_size=self.default_chunk_size,
             max_chunk_size=self.max_chunk_size,
             min_chunk_size=self.min_chunk_size,
-            default_output_format=self.default_output_format
+            default_output_format=self.default_output_format,
+            provider=self.generation_provider,
         )
 
     @property

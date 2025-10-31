@@ -21,7 +21,7 @@ def main():
     )
     parser.add_argument(
         "command",
-        choices=["server", "api", "version"],
+        choices=["server", "fastmcp", "api", "version"],
         help="Command to execute"
     )
     parser.add_argument(
@@ -41,6 +41,11 @@ def main():
     if args.command == "server":
         logger.info("Starting MCP server...")
         run_mcp_server()
+    elif args.command == "fastmcp":
+        from src.mcp_server.copilot_fastmcp import main as run_fastmcp
+
+        logger.info("Starting FastMCP Copilot server...")
+        run_fastmcp()
     elif args.command == "api":
         import uvicorn
 

@@ -1,6 +1,6 @@
 # Synthetic Dataset Generator 🚀
 
-Generate large, realistic datasets using natural language and LLMs (Google Gemini). Serve it as either an MCP tool or a standalone FastAPI backend for the SynthxAI web UI.
+Generate large, realistic datasets using natural language and LLMs (Google Gemini or GitHub Copilot / Claude Sonnet). Serve it as either an MCP tool, a FastMCP service, or a standalone FastAPI backend for the SynthxAI web UI.
 
 ## Quick Start
 
@@ -8,15 +8,19 @@ Generate large, realistic datasets using natural language and LLMs (Google Gemin
 # 1. Install dependencies (includes pytest & utilities)
 python -m pip install -e .
 
-# 2. Configure Gemini credentials
+# 2. Configure LLM credentials
 cp .env.example .env
-# edit .env and set GEMINI_API_KEY
+# edit .env and set either GEMINI_API_KEY or COPILOT_API_KEY
+# set GENERATION_PROVIDER=copilot to switch to Copilot
 
 # 3a. Start as an MCP server (for tool integrations)
 python main.py server
 
 # 3b. Start the public API (for the Next.js frontend)
 python main.py api --host 0.0.0.0 --port 8080
+
+# 3c. Start the FastMCP Copilot server
+python main.py fastmcp
 ```
 
 ## What It Does
@@ -27,7 +31,7 @@ Describe your dataset in plain English → Get a complete, realistic dataset in 
 
 ## Key Features
 
-- 🗣️ Natural language schema extraction
+- 🗣️ Natural language schema extraction (Gemini or Copilot)
 - 📊 Generate 10K+ row datasets
 - 🔄 Resumable jobs (pause/resume/retry)
 - ✅ Field validation & constraints
@@ -63,10 +67,22 @@ Describe your dataset in plain English → Get a complete, realistic dataset in 
 | `merge_and_download` | Get final dataset |
 | `validate_schema` | Validate schema |
 
+## FastMCP Copilot Server
+
+Need GitHub Copilot to generate very large datasets? Launch the dedicated FastMCP server:
+
+```bash
+GENERATION_PROVIDER=copilot python main.py fastmcp
+```
+
+Expose the `generate_dataset` tool to any MCP-compatible runtime. Provide a schema and row count, and the server orchestrates chunked generation, optional row streaming, and final dataset merging. Set `include_rows=true` in the tool arguments to receive the generated rows directly in the response (handy for small batches).
+
 ## Requirements
 
 - Python 3.10+
-- Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+- One of:
+    - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+    - GitHub Copilot API key with Claude Sonnet access (set `COPILOT_API_KEY` and `GENERATION_PROVIDER=copilot`)
 
 ## Installation
 
@@ -76,37 +92,42 @@ pip install -e .
 
 # Setup environment
 cp .env.example .env
-# Edit .env and add GEMINI_API_KEY
+# Edit .env and add GEMINI_API_KEY or COPILOT_API_KEY
 
 # Create directories
 mkdir -p temp output logs
 ```
 
-### Configure the Gemini API key
+### Configure LLM credentials
 
-The backend requires a valid Google Gemini API key for both runtime and tests.
+Copy `.env.example` to `.env` and populate the credentials for your preferred provider.
 
-1. Copy the example env file and add your key:
+#### Gemini (default)
 
-    ```bash
-    cp .env.example .env
-    # open .env in your editor and set GEMINI_API_KEY
-    ```
+```bash
+cp .env.example .env
+# open .env in your editor and set GEMINI_API_KEY
+```
 
-2. Optionally export the key directly in your shell (useful for CI or running tests without a `.env` file):
+You can also export the key directly when running in CI:
 
-    ```bash
-    # macOS / Linux (bash/zsh)
-    export GEMINI_API_KEY="your-real-key"
+```bash
+export GEMINI_API_KEY="your-real-key"
+```
 
-    # PowerShell
-    $env:GEMINI_API_KEY = "your-real-key"
+#### GitHub Copilot / Claude Sonnet
 
-    # Command Prompt
-    set GEMINI_API_KEY=your-real-key
-    ```
+```bash
+cp .env.example .env
+# set COPILOT_API_KEY and GENERATION_PROVIDER=copilot
+```
 
-    > Tip: when running `pytest`, ensure the environment variable is available to avoid configuration errors.
+Optional shell export:
+
+```bash
+export COPILOT_API_KEY="ghu_xxx"
+export GENERATION_PROVIDER=copilot
+```
 
 ## Usage Example
 
@@ -152,11 +173,14 @@ merge_and_download(job_id="...")
 Edit `.env`:
 
 ```bash
-GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=
 GEMINI_MODEL=gemini-1.5-pro
+COPILOT_API_KEY=
+COPILOT_MODEL=claude-3.5-sonnet
 DEFAULT_CHUNK_SIZE=1000
 STORAGE_TYPE=disk
 RATE_LIMIT_REQUESTS_PER_MINUTE=60
+GENERATION_PROVIDER=gemini
 ```
 
 ## Supported Field Types

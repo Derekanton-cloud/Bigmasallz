@@ -55,10 +55,14 @@ export const TYPE_OPTIONS = [
   "integer",
   "float",
   "boolean",
+  "date",
   "datetime",
-  "uuid",
   "email",
-  "currency",
+  "phone",
+  "uuid",
+  "enum",
+  "json",
+  "array",
 ];
 
 export const DEFAULT_FIELDS: FieldDefinition[] = [
@@ -97,9 +101,9 @@ export const DEFAULT_FIELDS: FieldDefinition[] = [
   {
     id: 5,
     name: "revenue_90d",
-    type: "currency",
+    type: "float",
     description: "Latest 90 day revenue snapshot",
     synthetic: true,
-    example: "$9,420.13",
+    example: "9420.13",
   },
 ];

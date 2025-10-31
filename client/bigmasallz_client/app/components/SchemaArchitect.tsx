@@ -11,16 +11,23 @@ interface SchemaArchitectProps {
   setDatasetNarrative: (value: string) => void;
   rowCount: number;
   setRowCount: (value: number) => void;
+  chunkSize: number;
+  setChunkSize: (value: number) => void;
+  outputFormat: string;
+  setOutputFormat: (value: string) => void;
   fields: FieldDefinition[];
   onAddField: () => void;
-  onFieldChange: <K extends keyof FieldDefinition>(
+  onFieldChange: (
     fieldId: number,
-    key: K,
-    value: FieldDefinition[K]
+    key: keyof FieldDefinition,
+    value: FieldDefinition[keyof FieldDefinition]
   ) => void;
   onRemoveField: (fieldId: number) => void;
   onGenerateDataset: () => void;
   isGenerating: boolean;
+  onExtractSchema: () => void;
+  isExtractingSchema: boolean;
+  schemaConfidence: number | null;
 }
 
 export default function SchemaArchitect({
@@ -30,12 +37,19 @@ export default function SchemaArchitect({
   setDatasetNarrative,
   rowCount,
   setRowCount,
+  chunkSize,
+  setChunkSize,
+  outputFormat,
+  setOutputFormat,
   fields,
   onAddField,
   onFieldChange,
   onRemoveField,
   onGenerateDataset,
   isGenerating,
+  onExtractSchema,
+  isExtractingSchema,
+  schemaConfidence,
 }: SchemaArchitectProps) {
   return (
     <div className="glass-panel group relative overflow-hidden rounded-3xl border border-cyan-500/30 bg-slate-900/85 shadow-2xl transition duration-500 hover:border-violet-400/40 hover:shadow-[0_0_60px_rgba(124,58,237,0.25)]">
@@ -53,8 +67,15 @@ export default function SchemaArchitect({
               Schema Architect
             </h2>
           </div>
-          <div className="px-3 py-1 rounded-full border border-cyan-400/40 bg-cyan-500/10 text-xs font-medium text-cyan-300">
-            DESIGN MODE
+          <div className="flex items-center gap-2">
+            {typeof schemaConfidence === "number" && (
+              <div className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                Confidence {(schemaConfidence * 100).toFixed(1)}%
+              </div>
+            )}
+            <div className="px-3 py-1 rounded-full border border-cyan-400/40 bg-cyan-500/10 text-xs font-medium text-cyan-300">
+              DESIGN MODE
+            </div>
           </div>
         </div>
       
@@ -76,6 +97,20 @@ export default function SchemaArchitect({
             onChange={(event) => setDatasetNarrative(event.target.value)}
           />
         </label>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onExtractSchema}
+            disabled={isExtractingSchema || !datasetNarrative.trim()}
+            className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-100 transition hover:bg-violet-500/30 disabled:cursor-not-allowed disabled:border-violet-400/20 disabled:bg-violet-500/10 disabled:text-violet-200/60"
+          >
+            <Sparkles className="h-4 w-4" />
+            {isExtractingSchema ? "Analyzing..." : "Suggest schema"}
+          </button>
+          <span className="text-xs text-slate-400">
+            Provide a rich description then ask the agent to design the schema for you.
+          </span>
+        </div>
         
         <label className="flex flex-col gap-2 text-sm">
           <span className="text-xs uppercase tracking-[0.25em] text-slate-400">Rows Required</span>
@@ -88,6 +123,32 @@ export default function SchemaArchitect({
             onChange={(event) => setRowCount(Number(event.target.value))}
           />
         </label>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-xs uppercase tracking-[0.25em] text-slate-400">Chunk Size</span>
+            <input
+              type="number"
+              min={100}
+              step={100}
+              className="rounded-2xl border border-cyan-500/40 bg-black/40 px-4 py-3 text-sm text-slate-100 focus:border-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400/30"
+              value={chunkSize}
+              onChange={(event) => setChunkSize(Number(event.target.value))}
+            />
+          </label>
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-xs uppercase tracking-[0.25em] text-slate-400">Output Format</span>
+            <select
+              className="rounded-2xl border border-cyan-500/40 bg-black/40 px-4 py-3 text-sm text-slate-100 focus:border-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-400/30"
+              value={outputFormat}
+              onChange={(event) => setOutputFormat(event.target.value)}
+            >
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+              <option value="parquet">Parquet</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div className="mt-6 flex items-center justify-between">

@@ -8,16 +8,33 @@ interface DatasetPreviewProps {
   previewData: Array<Record<string, any>>;
   fields: FieldDefinition[];
   stats: DatasetStats;
+  downloadUrl?: string | null;
 }
 
-export default function DatasetPreview({ isGenerated, previewData, fields, stats }: DatasetPreviewProps) {
+export default function DatasetPreview({
+  isGenerated,
+  previewData,
+  fields,
+  stats,
+  downloadUrl,
+}: DatasetPreviewProps) {
   return (
     <div className="glass-panel group relative overflow-hidden rounded-3xl border border-cyan-500/30 bg-slate-900/80 p-6 shadow-neon transition duration-500 hover:border-violet-400/40 hover:shadow-[0_0_55px_rgba(124,58,237,0.22)]">
       <div className="pointer-events-none absolute inset-x-4 -top-24 h-44 rounded-full bg-linear-to-b from-violet-500/12 via-transparent to-transparent blur-3xl opacity-0 transition group-hover:opacity-100 animate-drift-slow" />
       
       <div className="relative flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-100">Dataset Preview</h2>
-        <Database className="h-5 w-5 text-cyan-300" />
+        {downloadUrl ? (
+          <a
+            href={downloadUrl}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100 transition hover:bg-emerald-500/30"
+          >
+            <Download className="h-4 w-4" />
+            Download dataset
+          </a>
+        ) : (
+          <Database className="h-5 w-5 text-cyan-300" />
+        )}
       </div>
 
       {isGenerated ? (
@@ -56,45 +73,56 @@ export default function DatasetPreview({ isGenerated, previewData, fields, stats
                 <button className="rounded-lg border border-slate-600/40 bg-slate-800/60 p-2 text-slate-400 transition hover:border-cyan-400/40 hover:text-cyan-300">
                   <Filter className="h-4 w-4" />
                 </button>
-                <button className="rounded-lg border border-emerald-600/40 bg-emerald-500/20 p-2 text-emerald-300 transition hover:bg-emerald-500/30">
-                  <Download className="h-4 w-4" />
-                </button>
+                {downloadUrl && (
+                  <a
+                    href={downloadUrl}
+                    className="rounded-lg border border-emerald-600/40 bg-emerald-500/20 p-2 text-emerald-300 transition hover:bg-emerald-500/30"
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                )}
               </div>
             </div>
             
             <div className="overflow-hidden rounded-xl border border-slate-700/60 bg-black/40">
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-700/60 bg-slate-800/60">
-                      {fields.map((field, index) => (
-                        <th
-                          key={index}
-                          className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-300"
-                        >
-                          {field.name}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewData.map((row, rowIndex) => (
-                      <tr
-                        key={rowIndex}
-                        className="border-b border-slate-700/30 transition hover:bg-slate-800/40"
-                      >
-                        {fields.map((field, fieldIndex) => (
-                          <td
-                            key={fieldIndex}
-                            className="px-4 py-3 text-sm text-slate-200"
+                {previewData.length > 0 ? (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-700/60 bg-slate-800/60">
+                        {fields.map((field, index) => (
+                          <th
+                            key={index}
+                            className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-300"
                           >
-                            {row[field.name] || "-"}
-                          </td>
+                            {field.name}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {previewData.map((row, rowIndex) => (
+                        <tr
+                          key={rowIndex}
+                          className="border-b border-slate-700/30 transition hover:bg-slate-800/40"
+                        >
+                          {fields.map((field, fieldIndex) => (
+                            <td
+                              key={fieldIndex}
+                              className="px-4 py-3 text-sm text-slate-200"
+                            >
+                              {row[field.name] ?? "-"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="px-4 py-6 text-sm text-slate-300">
+                    Preview unavailable for this dataset. Download the file to inspect full results.
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from pathlib import Path
 from typing import Any, Iterable
 from uuid import UUID
 
 from src.api import QuotaExceededError, get_gemini_client
+from src.api.copilot_client import (
+    CopilotAPIError,
+    CopilotConfigurationError,
+    get_copilot_client,
+)
 from src.config import settings
 from src.core.job_manager import get_job_manager
 from src.core.models import (
@@ -77,7 +83,28 @@ class GenerationService:
 
     def __init__(self):
         self.job_manager = get_job_manager()
-        self.gemini_client = get_gemini_client()
+        self.provider = settings.generation.provider
+        self.gemini_client = None
+        self.copilot_client = None
+
+        if self.provider == "copilot":
+            try:
+                self.copilot_client = get_copilot_client()
+            except CopilotConfigurationError as exc:
+                logger.warning(
+                    "Copilot selected but not configured (%s); falling back to Gemini",
+                    exc,
+                )
+                self.provider = "gemini"
+
+        if self.provider == "gemini":
+            if settings.gemini_api_key:
+                self.gemini_client = get_gemini_client()
+            else:
+                logger.warning(
+                    "Gemini selected but GEMINI_API_KEY is not set; using fallback generator only"
+                )
+
         self._storage_handlers: dict[str, StorageHandler] = {}
         self._vector_store = self._init_vector_store()
         self._fallback_generator: FallbackGenerator = build_fallback_generator()
@@ -110,24 +137,46 @@ class GenerationService:
             context=context,
             example_data=example_data,
         )
-        logger.info("Running schema extraction via Gemini")
-        try:
-            return self.gemini_client.extract_schema(request)
-        except QuotaExceededError as exc:
-            logger.warning("Gemini quota exceeded during schema extraction; switching to fallback", exc_info=False)
-            fallback_response = self._fallback_generator.extract_schema(request)
-            quota_message = self._format_quota_warning(exc)
-            fallback_response.warnings.insert(0, quota_message)
-            fallback_response.suggestions.append("Re-run schema extraction once Gemini quota resets for richer results.")
-            fallback_response.schema.metadata.setdefault("fallback", {})
-            fallback_response.schema.metadata["fallback"].update(
-                {
-                    "reason": "quota_exceeded",
-                    "quota_metric": exc.quota_metric,
-                    "retry_after_seconds": exc.retry_after,
-                }
-            )
-            return fallback_response
+
+        if self.provider == "copilot" and self.copilot_client:
+            logger.info("Running schema extraction via Copilot")
+            try:
+                return self.copilot_client.extract_schema(request)
+            except CopilotAPIError as exc:
+                logger.warning(
+                    "Copilot schema extraction failed; using fallback: %s",
+                    exc,
+                    exc_info=False,
+                )
+                return self._fallback_generator.extract_schema(request)
+
+        if self.gemini_client:
+            logger.info("Running schema extraction via Gemini")
+            try:
+                return self.gemini_client.extract_schema(request)
+            except QuotaExceededError as exc:
+                logger.warning(
+                    "Gemini quota exceeded during schema extraction; switching to fallback",
+                    exc_info=False,
+                )
+                fallback_response = self._fallback_generator.extract_schema(request)
+                quota_message = self._format_quota_warning(exc)
+                fallback_response.warnings.insert(0, quota_message)
+                fallback_response.suggestions.append(
+                    "Re-run schema extraction once Gemini quota resets for richer results."
+                )
+                fallback_response.schema.metadata.setdefault("fallback", {})
+                fallback_response.schema.metadata["fallback"].update(
+                    {
+                        "reason": "quota_exceeded",
+                        "quota_metric": exc.quota_metric,
+                        "retry_after_seconds": exc.retry_after,
+                    }
+                )
+                return fallback_response
+
+        logger.info("No primary LLM configured; using fallback schema extraction")
+        return self._fallback_generator.extract_schema(request)
 
     def create_generation_job(
         self,
@@ -229,7 +278,11 @@ class GenerationService:
         deduped_rows: list[dict[str, Any]] = []
         duplicates_total = 0
         attempts = 0
-        max_attempts = settings.vector_store.max_retry_attempts if vector_store else 1
+        provider_attempts = max(1, math.ceil(rows_this_chunk / self._provider_batch_limit()))
+        vector_attempts = (
+            settings.vector_store.max_retry_attempts if vector_store else provider_attempts
+        )
+        max_attempts = max(provider_attempts, vector_attempts)
 
         use_fallback_only = False
         fallback_issue: str | None = None
@@ -239,7 +292,7 @@ class GenerationService:
                 attempts += 1
                 rows_needed = rows_this_chunk - len(deduped_rows)
 
-                if use_fallback_only:
+                if use_fallback_only or not self._provider_available():
                     batch = self._fallback_generator.generate_data_chunk(
                         schema=job.specification.schema,
                         num_rows=rows_needed,
@@ -248,7 +301,7 @@ class GenerationService:
                     )
                 else:
                     try:
-                        batch = self.gemini_client.generate_data_chunk(
+                        batch = self._generate_with_provider(
                             schema=job.specification.schema,
                             num_rows=rows_needed,
                             existing_values=existing_values if existing_values else None,
@@ -262,6 +315,21 @@ class GenerationService:
                         )
                         use_fallback_only = True
                         fallback_issue = self._format_quota_warning(exc)
+                        batch = self._fallback_generator.generate_data_chunk(
+                            schema=job.specification.schema,
+                            num_rows=rows_needed,
+                            existing_values=existing_values if existing_values else None,
+                            seed=job.specification.seed,
+                        )
+                    except CopilotAPIError as exc:
+                        logger.warning(
+                            "Copilot error while generating chunk %s for job %s; using fallback: %s",
+                            chunk_id,
+                            job_id,
+                            exc,
+                        )
+                        use_fallback_only = True
+                        fallback_issue = f"Copilot error: {exc}"[:200]
                         batch = self._fallback_generator.generate_data_chunk(
                             schema=job.specification.schema,
                             num_rows=rows_needed,
@@ -432,6 +500,46 @@ class GenerationService:
         if exc.retry_after:
             parts.append(f"retry after ~{int(exc.retry_after)}s")
         return " ".join(parts)
+
+    def _provider_available(self) -> bool:
+        if self.provider == "copilot":
+            return self.copilot_client is not None
+        if self.provider == "gemini":
+            return self.gemini_client is not None
+        return False
+
+    def _provider_batch_limit(self) -> int:
+        if self.provider == "copilot" and self.copilot_client:
+            return max(1, self.copilot_client.max_rows_per_call())
+        return max(1, settings.generation.max_chunk_size)
+
+    def _generate_with_provider(
+        self,
+        *,
+        schema: DataSchema,
+        num_rows: int,
+        existing_values: dict[str, list[Any]] | None,
+        seed: int | None,
+    ) -> list[dict[str, Any]]:
+        if self.provider == "copilot":
+            if not self.copilot_client:
+                raise CopilotAPIError("Copilot client is not configured")
+            return self.copilot_client.generate_data_chunk(
+                schema=schema,
+                num_rows=num_rows,
+                existing_values=existing_values,
+                seed=seed,
+            )
+
+        if self.provider == "gemini" and self.gemini_client:
+            return self.gemini_client.generate_data_chunk(
+                schema=schema,
+                num_rows=num_rows,
+                existing_values=existing_values,
+                seed=seed,
+            )
+
+        raise RuntimeError("No primary LLM provider configured for data generation")
 
     def _collect_existing_values(
         self, job: JobState, uniqueness_fields: Iterable[str]

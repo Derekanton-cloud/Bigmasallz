@@ -7,6 +7,18 @@ export type ChatMessage = {
   timestamp: string;
 };
 
+export type FieldConstraint = {
+  unique?: boolean;
+  nullable?: boolean;
+  min_value?: number;
+  max_value?: number;
+  min_length?: number;
+  max_length?: number;
+  pattern?: string;
+  enum_values?: string[];
+  format?: string;
+};
+
 export type FieldDefinition = {
   id: number;
   name: string;
@@ -14,6 +26,8 @@ export type FieldDefinition = {
   description: string;
   synthetic: boolean;
   example: string;
+  constraints?: FieldConstraint;
+  sampleValues?: string[];
 };
 
 export type DatasetStats = {
@@ -22,6 +36,7 @@ export type DatasetStats = {
   estimatedSize: string;
   syntheticScore: number;
   generationTime: string;
+  fileSizeBytes?: number;
 };
 
 export type LlmMetric = {
